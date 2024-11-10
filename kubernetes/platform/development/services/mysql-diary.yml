@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-diary
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/data/diary"
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-diary-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config-diary
+  labels:
+    db: comma-mysql-diary
+data:
+  init.sql: |
+    CREATE DATABASE comma_diary;
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: comma-mysql-diary
+  labels:
+    db: comma-mysql-diary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      db: comma-mysql-diary
+  template:
+    metadata:
+      labels:
+        db: comma-mysql-diary
+    spec:
+      containers:
+        - name: comma-mysql-diary
+          image: mysql:8.3
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_ROOT_PASSWORD
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_USER
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_PASSWORD
+          ports:
+            - containerPort: 3306
+          resources:
+            requests:
+              cpu: 300m
+              memory: 512Mi
+            limits:
+              cpu: 700m
+              memory: 1Gi
+          volumeMounts:
+            - mountPath: /docker-entrypoint-initdb.d
+              name: mysql-config-diary-volume
+            - mountPath: /var/lib/mysql
+              name: mysql-diary-persistent-storage
+      volumes:
+        - name: mysql-config-diary-volume
+          configMap:
+            name: mysql-config-diary
+        - name: mysql-diary-persistent-storage
+          persistentVolumeClaim:
+            claimName: mysql-diary-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: comma-mysql-diary
+  labels:
+    db: comma-mysql-diary
+spec:
+  type: ClusterIP
+  selector:
+    db: comma-mysql-diary
+  ports:
+    - protocol: TCP
+      port: 7002
+      targetPort: 3306

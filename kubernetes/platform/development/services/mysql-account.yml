@@ -1,0 +1,111 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-account
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/data/account"
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-account-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config-account
+  labels:
+    db: comma-mysql-account
+data:
+  init.sql: |
+    CREATE DATABASE comma_account;
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: comma-mysql-account
+  labels:
+    db: comma-mysql-account
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      db: comma-mysql-account
+  template:
+    metadata:
+      labels:
+        db: comma-mysql-account
+    spec:
+      containers:
+        - name: comma-mysql-account
+          image: mysql:8.3
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_ROOT_PASSWORD
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_USER
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_PASSWORD
+          ports:
+            - containerPort: 3306
+          resources:
+            requests:
+              cpu: 300m
+              memory: 512Mi
+            limits:
+              cpu: 700m
+              memory: 1Gi
+          volumeMounts:
+            - mountPath: /docker-entrypoint-initdb.d
+              name: mysql-config-account-volume
+            - mountPath: /var/lib/mysql
+              name: mysql-account-persistent-storage
+      volumes:
+        - name: mysql-config-account-volume
+          configMap:
+            name: mysql-config-account
+        - name: mysql-account-persistent-storage
+          persistentVolumeClaim:
+            claimName: mysql-account-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: comma-mysql-account
+  labels:
+    db: comma-mysql-account
+spec:
+  type: ClusterIP
+  selector:
+    db: comma-mysql-account
+  ports:
+    - protocol: TCP
+      port: 7001
+      targetPort: 3306
+
+

@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-psychology
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/data/psychology"
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-psychology-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config-psychology
+  labels:
+    db: comma-mysql-psychology
+data:
+  init.sql: |
+    CREATE DATABASE comma_psychology;
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: comma-mysql-psychology
+  labels:
+    db: comma-mysql-psychology
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      db: comma-mysql-psychology
+  template:
+    metadata:
+      labels:
+        db: comma-mysql-psychology
+    spec:
+      containers:
+        - name: comma-mysql-psychology
+          image: mysql:8.3
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_ROOT_PASSWORD
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_USER
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_PASSWORD
+          ports:
+            - containerPort: 3306
+          resources:
+            requests:
+              cpu: 300m
+              memory: 512Mi
+            limits:
+              cpu: 700m
+              memory: 1Gi
+          volumeMounts:
+            - mountPath: /docker-entrypoint-initdb.d
+              name: mysql-config-psychology-volume
+            - mountPath: /var/lib/mysql
+              name: mysql-psychology-persistent-storage
+      volumes:
+        - name: mysql-config-psychology-volume
+          configMap:
+            name: mysql-config-psychology
+        - name: mysql-psychology-persistent-storage
+          persistentVolumeClaim:
+            claimName: mysql-psychology-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: comma-mysql-psychology
+  labels:
+    db: comma-mysql-psychology
+spec:
+  type: ClusterIP
+  selector:
+    db: comma-mysql-psychology
+  ports:
+    - protocol: TCP
+      port: 7003
+      targetPort: 3306
