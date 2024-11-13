@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - github.com/nexmotion-lab/comma-psychology-service/k8s/base?ref=k8s
+
+patches:
+  - path: patch-env.yaml
+  - path: patch-resource.yaml
+
+configMapGenerator:
+  - behavior: merge
+    files:
+      - application-prod.yml
+    name: psychology-config
+
+images:
+  - name: psychology-service
+    newName: sunwoo3856/psychology
+    newTag: latest
+
+replicas:
+  - count: 1
+    name: psychology-service
+

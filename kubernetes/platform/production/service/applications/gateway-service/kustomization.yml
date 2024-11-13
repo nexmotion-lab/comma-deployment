@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - github.com/nexmotion-lab/comma-gateway/k8s/base?ref=k8s
+  - cluster-issuer.yaml
+
+patches:
+  - path: patch-env.yaml
+  - path: patch-ingress.yaml
+  - path: patch-resource.yaml
+
+configMapGenerator:
+  - behavior: merge
+    files:
+      - application-prod.yml
+    name: gateway-config
+
+images:
+  - name: gateway-service
+    newName: sunwoo3856/gateway
+    newTag: latest
+
+replicas:
+  - count: 1
+    name: gateway-service
+
